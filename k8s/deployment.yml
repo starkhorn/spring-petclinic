@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring-petclinic
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spring-petclinic
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spring-petclinic
+    spec:
+      initContainers:
+        - name: newrelic-setup
+          image: busybox:1.33
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /opt/newrelic
+              name: newrelic
+            - mountPath: /tmp/newrelic-config
+              name: newrelic-config
+          args:
+            - /bin/sh
+            - -c
+            - >
+              cd /opt/newrelic;
+
+              wget https://download.newrelic.com/newrelic/java-agent/newrelic-agent/current/newrelic-java.zip;
+              unzip newrelic-java.zip;
+              mv newrelic/newrelic.jar .;
+
+              cp /tmp/newrelic-config/newrelic.yml .;
+
+              rm -rf newrelic;
+              rm newrelic-java.zip;
+      containers:
+        - name: app
+          image: spring-petclinic:latest
+          imagePullPolicy: Never  # to pull from local registry
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: -javaagent:/opt/newrelic/newrelic.jar
+          envFrom:
+            - secretRef:
+                name: newrelic-secret
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - mountPath: /opt/newrelic
+              name: newrelic
+      volumes:
+        - name: newrelic
+          emptyDir: {}
+        - name: newrelic-config
+          configMap:
+            name: newrelic-config
